@@ -175,6 +175,28 @@ export default function ReceiptPreview({ file, settings, onSettingsChange, conve
             />
             Sisipkan logo PakeinAja di atas resi
           </label>
+
+          {settings.showLogo && (
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-ink-700">Ukuran Logo</label>
+                <span className="font-mono text-xs text-ink-500">{settings.logoSize}%</span>
+              </div>
+              <input
+                type="range"
+                min={20}
+                max={60}
+                step={5}
+                value={settings.logoSize}
+                onChange={(e) => onSettingsChange({ logoSize: Number(e.target.value) })}
+                className="mt-1 w-full accent-signal"
+              />
+              <div className="flex justify-between text-[10px] text-ink-400">
+                <span>Kecil</span>
+                <span>Besar</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

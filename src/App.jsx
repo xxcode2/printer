@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
   pageNumber: 1,
   pageRange: "", // kosong = semua halaman
   showLogo: true, // tampilkan logo PakeinAja di atas resi
+  logoSize: 35, // ukuran logo dalam % lebar kertas (20-60)
 };
 
 export default function App() {

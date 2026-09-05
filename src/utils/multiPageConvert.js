@@ -15,7 +15,7 @@ import { canvasToMonochromeBitmap, createLogoHeader, cropWhitespace, resizeToWid
  * @param {function} [onProgress] - callback(currentPage, totalPages)
  * @returns {Promise<{ bitmaps: Array, pageCount: number }>}
  */
-export async function convertAllPdfPages(file, { paperWidthDots, threshold, dither, showLogo = true }, onProgress, pages) {
+export async function convertAllPdfPages(file, { paperWidthDots, threshold, dither, showLogo = true, logoSize = 35 }, onProgress, pages) {
   const arrayBuffer = await file.arrayBuffer();
   const pageCount = await getPdfPageCount(arrayBuffer);
   const pagesToConvert = pages || Array.from({ length: pageCount }, (_, i) => i + 1);
@@ -25,7 +25,7 @@ export async function convertAllPdfPages(file, { paperWidthDots, threshold, dith
   let logoHeader = null;
   if (showLogo) {
     try {
-      logoHeader = await createLogoHeader("/pakein.jpg", paperWidthDots);
+      logoHeader = await createLogoHeader("/pakein.jpg", paperWidthDots, { logoWidthPx: Math.round(paperWidthDots * logoSize / 100) });
     } catch (err) {
       console.warn("Logo header gagal dimuat:", err);
     }

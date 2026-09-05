@@ -45,6 +45,7 @@ export default function PrintControls({ printer, bitmap, file, settings, disable
           threshold: settings.threshold,
           dither: settings.dither,
           showLogo: settings.showLogo,
+          logoSize: settings.logoSize,
         },
         (current, total) => setAllPagesProgress({ current, total }),
         pagesToConvert
