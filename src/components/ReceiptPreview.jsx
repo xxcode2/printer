@@ -1,4 +1,4 @@
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 
 const PAPER_WIDTHS = [
   { label: "58 mm", dots: 384 },
@@ -7,7 +7,8 @@ const PAPER_WIDTHS = [
 ];
 
 export default function ReceiptPreview({ file, settings, onSettingsChange, converter }) {
-  const { status, error, previewUrl, pageCount } = converter;
+  const { status, error, previewUrl, pageCount, thumbnails } = converter;
+  const isPdf = file?.type === "application/pdf";
 
   if (!file) {
     return (
@@ -21,13 +22,43 @@ export default function ReceiptPreview({ file, settings, onSettingsChange, conve
     <div className="rounded-xl border border-ink-900/10 bg-white p-5 shadow-card">
       <div className="flex items-center justify-between">
         <h2 className="font-display text-base font-semibold text-ink-900">Preview Hasil Cetak</h2>
-        {status === "loading" && <span className="text-xs text-ink-500">Memproses…</span>}
+        <div className="flex items-center gap-2">
+          {status === "loading" && <span className="text-xs text-ink-500">Memproses…</span>}
+          {isPdf && status === "ready" && (
+            <span className="rounded-full bg-ink-900/5 px-2.5 py-0.5 font-mono text-xs text-ink-600">
+              {pageCount} halaman
+            </span>
+          )}
+        </div>
       </div>
 
       {error && (
         <div className="mt-3 flex items-start gap-2 rounded-lg bg-signal/5 px-3 py-2 text-xs text-signal">
           <AlertCircle size={14} className="mt-0.5 shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* Navigasi halaman untuk PDF multi-page */}
+      {isPdf && pageCount > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <button
+            onClick={() => onSettingsChange({ pageNumber: Math.max(1, settings.pageNumber - 1) })}
+            disabled={settings.pageNumber <= 1}
+            className="rounded-lg border border-ink-900/10 p-1.5 text-ink-700 transition-colors hover:bg-paper-100 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="min-w-[80px] text-center font-mono text-sm text-ink-700">
+            Halaman {settings.pageNumber} / {pageCount}
+          </span>
+          <button
+            onClick={() => onSettingsChange({ pageNumber: Math.min(pageCount, settings.pageNumber + 1) })}
+            disabled={settings.pageNumber >= pageCount}
+            className="rounded-lg border border-ink-900/10 p-1.5 text-ink-700 transition-colors hover:bg-paper-100 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
       )}
 
@@ -67,24 +98,7 @@ export default function ReceiptPreview({ file, settings, onSettingsChange, conve
               ))}
             </div>
           </div>
-
-          {pageCount > 1 && (
-            <div>
-              <label className="text-xs font-medium text-ink-700">Halaman</label>
-              <select
-                value={settings.pageNumber}
-                onChange={(e) => onSettingsChange({ pageNumber: Number(e.target.value) })}
-                className="mt-1.5 w-full rounded-lg border border-ink-900/10 px-3 py-1.5 text-sm"
-              >
-                {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>
-                    Halaman {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
+        
           <div>
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-ink-700">Ketajaman (Threshold)</label>
@@ -111,6 +125,39 @@ export default function ReceiptPreview({ file, settings, onSettingsChange, conve
           </label>
         </div>
       </div>
+
+      {/* Thumbnail strip — klik untuk pilih halaman */}
+      {isPdf && thumbnails.length > 1 && (
+        <div className="mt-4 border-t border-ink-900/10 pt-4">
+          <p className="mb-2 text-xs font-medium text-ink-700">Pilih Halaman</p>
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+            {thumbnails.map((url, i) => (
+              <button
+                key={i}
+                onClick={() => onSettingsChange({ pageNumber: i + 1 })}
+                className={`relative shrink-0 overflow-hidden rounded-lg border-2 transition-all ${
+                  settings.pageNumber === i + 1
+                    ? "border-signal ring-2 ring-signal/20"
+                    : "border-ink-900/10 hover:border-ink-900/25"
+                }`}
+              >
+                <img
+                  src={url}
+                  alt={`Halaman ${i + 1}`}
+                  className="h-20 w-auto"
+                />
+                <span className={`absolute bottom-0.5 right-0.5 rounded px-1 py-0.5 font-mono text-[10px] leading-none ${
+                  settings.pageNumber === i + 1
+                    ? "bg-signal text-white"
+                    : "bg-ink-900/60 text-white"
+                }`}>
+                  {i + 1}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

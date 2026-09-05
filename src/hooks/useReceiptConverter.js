@@ -18,11 +18,51 @@ export function useReceiptConverter(file, { paperWidthDots, threshold, dither, p
     previewUrl: null,
     bitmap: null,
     pageCount: 1,
+    thumbnails: [], // data URL kecil untuk setiap halaman PDF
   });
+
+  // Generate thumbnail kecil untuk semua halaman PDF di background
+  useEffect(() => {
+    if (!file || file.type !== "application/pdf") {
+      setState((prev) => ({ ...prev, thumbnails: [] }));
+      return;
+    }
+
+    let cancelled = false;
+    const THUMB_WIDTH = 120;
+
+    (async () => {
+      try {
+        const ab = await file.arrayBuffer();
+        const count = await getPdfPageCount(ab);
+        const thumbs = [];
+
+        for (let p = 1; p <= count; p++) {
+          const { canvas } = await renderPdfPageToCanvas(
+            await file.arrayBuffer(),
+            { pageNumber: p, targetWidthPx: THUMB_WIDTH * 3 }
+          );
+          const resized = resizeToWidth(canvas, THUMB_WIDTH);
+          const rawBmp = canvasToMonochromeBitmap(resized, { threshold, dither });
+          const bmp = cropWhitespace(rawBmp);
+          const thumbCanvas = renderMonochromeToCanvas(bmp);
+          thumbs.push(thumbCanvas.toDataURL("image/png"));
+          if (cancelled) return;
+        }
+
+        if (cancelled) return;
+        setState((prev) => ({ ...prev, thumbnails: thumbs }));
+      } catch (err) {
+        console.error("Thumbnail generation error:", err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [file, threshold, dither]);
 
   useEffect(() => {
     if (!file) {
-      setState({ status: "idle", error: null, previewUrl: null, bitmap: null, pageCount: 1 });
+      setState({ status: "idle", error: null, previewUrl: null, bitmap: null, pageCount: 1, thumbnails: [] });
       return;
     }
 
@@ -53,23 +93,25 @@ export function useReceiptConverter(file, { paperWidthDots, threshold, dither, p
         const previewCanvas = renderMonochromeToCanvas(bitmap);
 
         if (cancelled) return;
-        setState({
+        setState((prev) => ({
           status: "ready",
           error: null,
           previewUrl: previewCanvas.toDataURL("image/png"),
           bitmap,
           pageCount,
-        });
+          thumbnails: prev.thumbnails,
+        }));
       } catch (err) {
         console.error("Receipt conversion error:", err);
         if (cancelled) return;
-        setState({
+        setState((prev) => ({
           status: "error",
           error: err?.message || "Gagal memproses file resi.",
           previewUrl: null,
           bitmap: null,
           pageCount: 1,
-        });
+          thumbnails: prev.thumbnails,
+        }));
       }
     })();
 
