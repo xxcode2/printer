@@ -6,13 +6,22 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 /**
- * Merender halaman pertama sebuah file PDF (ArrayBuffer) menjadi
+ * Membuat salinan ArrayBuffer karena pdf.js men-detach buffer yang
+ * diberikan ke getDocument(). Tanpa copy, buffer tidak bisa dipakai
+ * berulang kali.
+ */
+function cloneArrayBuffer(source) {
+  return source.slice(0);
+}
+
+/**
+ * Merender halaman sebuah file PDF (ArrayBuffer) menjadi
  * HTMLCanvasElement. `targetWidthPx` menentukan resolusi render awal —
  * usahakan cukup tinggi (mis. 2-3x lebar printer) agar hasil resize ke
  * lebar printer nanti tetap tajam, bukan pecah/blur.
  */
 export async function renderPdfPageToCanvas(arrayBuffer, { pageNumber = 1, targetWidthPx = 1200 } = {}) {
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: cloneArrayBuffer(arrayBuffer) }).promise;
   const page = await pdf.getPage(pageNumber);
 
   const baseViewport = page.getViewport({ scale: 1 });
@@ -36,7 +45,7 @@ export async function renderPdfPageToCanvas(arrayBuffer, { pageNumber = 1, targe
 
 /** Mengembalikan jumlah halaman total dari sebuah PDF, untuk UI pemilih halaman. */
 export async function getPdfPageCount(arrayBuffer) {
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: cloneArrayBuffer(arrayBuffer) }).promise;
   return pdf.numPages;
 }
 

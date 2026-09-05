@@ -20,9 +20,8 @@ export async function convertAllPdfPages(file, { paperWidthDots, threshold, dith
   const bitmaps = [];
 
   for (let page = 1; page <= pageCount; page++) {
-    // Render ulang ArrayBuffer karena pdf.js bisa consume data-nya
-    const ab = await file.arrayBuffer();
-    const { canvas } = await renderPdfPageToCanvas(ab, {
+    // pdfToCanvas sudah clone ArrayBuffer internally, jadi aman pakai buffer yang sama
+    const { canvas } = await renderPdfPageToCanvas(arrayBuffer, {
       pageNumber: page,
       targetWidthPx: paperWidthDots * 3,
     });
