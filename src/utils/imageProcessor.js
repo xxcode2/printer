@@ -113,6 +113,48 @@ export function canvasToMonochromeBitmap(canvas, { threshold = 180, dither = fal
 }
 
 /**
+ * Memotong baris putih (kosong) di bagian atas dan bawah bitmap.
+ * Resi e-commerce sering punya margin besar di atas/bawah karena
+ * format kertas A4. Fungsi ini menghemat kertas thermal dengan
+ * membuang area kosong tersebut.
+ *
+ * @param {{ width: number, height: number, bits: Uint8Array }} bitmap
+ * @param {number} [paddingPx=8] - jumlah pixel putih yang disisakan di atas/bawah
+ * @returns {{ width: number, height: number, bits: Uint8Array }}
+ */
+export function cropWhitespace(bitmap, paddingPx = 8) {
+  const { width, height, bits } = bitmap;
+
+  // Cek apakah satu baris penuh berisi putih (semua 0 = tidak ada titik hitam)
+  function isRowEmpty(y) {
+    const offset = y * width;
+    for (let x = 0; x < width; x++) {
+      if (bits[offset + x] === 1) return false;
+    }
+    return true;
+  }
+
+  // Cari baris pertama yang ada konten dari atas
+  let top = 0;
+  while (top < height && isRowEmpty(top)) top++;
+
+  // Cari baris terakhir yang ada konten dari bawah
+  let bottom = height - 1;
+  while (bottom > top && isRowEmpty(bottom)) bottom--;
+
+  // Tambahkan sedikit padding supaya konten tidak mepet tepi
+  const cropTop = Math.max(0, top - paddingPx);
+  const cropBottom = Math.min(height - 1, bottom + paddingPx);
+  const newHeight = cropBottom - cropTop + 1;
+
+  // Kalau tidak ada perubahan, kembalikan bitmap asli
+  if (cropTop === 0 && cropBottom === height - 1) return bitmap;
+
+  const newBits = bits.slice(cropTop * width, (cropBottom + 1) * width);
+  return { width, height: newHeight, bits: newBits };
+}
+
+/**
  * Merender bitmap monokrom (1=hitam per pixel) kembali ke sebuah canvas,
  * berguna untuk preview "seperti hasil cetak" di layar sebelum benar-benar
  * dikirim ke printer.

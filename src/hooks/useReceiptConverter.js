@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getPdfPageCount, loadImageFile, renderPdfPageToCanvas } from "../utils/pdfToCanvas";
-import { canvasToMonochromeBitmap, renderMonochromeToCanvas, resizeToWidth } from "../utils/imageProcessor";
+import { canvasToMonochromeBitmap, cropWhitespace, renderMonochromeToCanvas, resizeToWidth } from "../utils/imageProcessor";
 
 /**
  * Mengubah file resi (PDF/PNG/JPG) menjadi bitmap monokrom siap-cetak,
@@ -48,7 +48,8 @@ export function useReceiptConverter(file, { paperWidthDots, threshold, dither, p
         }
 
         const resized = resizeToWidth(sourceCanvas, paperWidthDots);
-        const bitmap = canvasToMonochromeBitmap(resized, { threshold, dither });
+        const rawBitmap = canvasToMonochromeBitmap(resized, { threshold, dither });
+        const bitmap = cropWhitespace(rawBitmap);
         const previewCanvas = renderMonochromeToCanvas(bitmap);
 
         if (cancelled) return;

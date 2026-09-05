@@ -1,5 +1,5 @@
 import { getPdfPageCount, renderPdfPageToCanvas } from "./pdfToCanvas";
-import { canvasToMonochromeBitmap, resizeToWidth } from "./imageProcessor";
+import { canvasToMonochromeBitmap, cropWhitespace, resizeToWidth } from "./imageProcessor";
 
 /**
  * Mengonversi SEMUA halaman PDF menjadi array bitmap monokrom.
@@ -27,7 +27,8 @@ export async function convertAllPdfPages(file, { paperWidthDots, threshold, dith
     });
 
     const resized = resizeToWidth(canvas, paperWidthDots);
-    const bitmap = canvasToMonochromeBitmap(resized, { threshold, dither });
+    const rawBitmap = canvasToMonochromeBitmap(resized, { threshold, dither });
+    const bitmap = cropWhitespace(rawBitmap);
     bitmaps.push(bitmap);
 
     if (onProgress) onProgress(page, pageCount);
