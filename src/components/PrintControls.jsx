@@ -3,6 +3,7 @@ import { Printer, Minus, Plus, CheckCircle2, Layers } from "lucide-react";
 import Button from "./ui/Button";
 import { buildPrintJob } from "../utils/escpos";
 import { convertAllPdfPages } from "../utils/multiPageConvert";
+import { parsePageRange } from "../utils/pageRange";
 
 export default function PrintControls({ printer, bitmap, file, settings, disabled }) {
   const [copies, setCopies] = useState(1);
@@ -11,6 +12,13 @@ export default function PrintControls({ printer, bitmap, file, settings, disable
   const [allPagesProgress, setAllPagesProgress] = useState(null);
 
   const isPdf = file?.type === "application/pdf";
+
+  // Hitung halaman yang dipilih dari pageRange
+  const selectedPages = isPdf
+    ? parsePageRange(settings.pageRange || "", settings.pageCount || 1)
+    : [];
+  const totalPages = isPdf ? (settings.pageCount || 1) : 0;
+  const hasCustomRange = selectedPages.length > 0 && selectedPages.length < totalPages;
 
   const handlePrint = async () => {
     if (!bitmap) return;
@@ -28,14 +36,17 @@ export default function PrintControls({ printer, bitmap, file, settings, disable
     setJustPrinted(false);
 
     try {
-      const { bitmaps, pageCount } = await convertAllPdfPages(
+      // Kalau ada range custom, hanya cetak halaman yang dipilih
+      const pagesToConvert = hasCustomRange ? selectedPages : undefined;
+      const { bitmaps } = await convertAllPdfPages(
         file,
         {
           paperWidthDots: settings.paperWidthDots,
           threshold: settings.threshold,
           dither: settings.dither,
         },
-        (current, total) => setAllPagesProgress({ current, total })
+        (current, total) => setAllPagesProgress({ current, total }),
+        pagesToConvert
       );
 
       // Kirim setiap halaman sebagai job terpisah, halaman terakhir yang di-cut
@@ -98,13 +109,15 @@ export default function PrintControls({ printer, bitmap, file, settings, disable
           variant="secondary"
           onClick={handlePrintAllPages}
           loading={isPrintingAll}
-          disabled={disabled || !file}
+          disabled={disabled || !file || selectedPages.length === 0}
           className="mt-2 w-full"
         >
           {isPrintingAll && allPagesProgress
             ? `Memproses ${allPagesProgress.current}/${allPagesProgress.total}…`
             : justPrinted
-            ? "Semua Halaman Terkirim"
+            ? "Halaman Terkirim"
+            : hasCustomRange
+            ? `Cetak ${selectedPages.length} Halaman`
             : "Cetak Semua Halaman"}
         </Button>
       )}

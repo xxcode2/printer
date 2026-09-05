@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   threshold: 180,
   dither: false,
   pageNumber: 1,
+  pageRange: "", // kosong = semua halaman
 };
 
 export default function App() {
@@ -22,7 +23,7 @@ export default function App() {
   const converter = useReceiptConverter(file, settings);
 
   const handleFileSelected = (newFile) => {
-    setSettings((prev) => ({ ...prev, pageNumber: 1 }));
+    setSettings((prev) => ({ ...prev, pageNumber: 1, pageRange: "" }));
     setFile(newFile);
   };
 
@@ -40,7 +41,7 @@ export default function App() {
           <div className="space-y-6">
             <PrinterPanel printer={printer} />
             <FileUploader file={file} onFileSelected={handleFileSelected} />
-            <PrintControls printer={printer} bitmap={converter.bitmap} file={file} settings={settings} disabled={!canPrint} />
+            <PrintControls printer={printer} bitmap={converter.bitmap} file={file} settings={{ ...settings, pageCount: converter.pageCount }} disabled={!canPrint} />
           </div>
 
           {/* Kolom kanan: preview & pengaturan konversi */}

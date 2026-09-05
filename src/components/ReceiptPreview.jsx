@@ -1,4 +1,6 @@
-import { AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { parsePageRange, compressToRange } from "../utils/pageRange";
 
 const PAPER_WIDTHS = [
   { label: "58 mm", dots: 384 },
@@ -9,6 +11,46 @@ const PAPER_WIDTHS = [
 export default function ReceiptPreview({ file, settings, onSettingsChange, converter }) {
   const { status, error, previewUrl, pageCount, thumbnails } = converter;
   const isPdf = file?.type === "application/pdf";
+  const [rangeInput, setRangeInput] = useState(settings.pageRange || "");
+
+  const selectedPages = isPdf ? parsePageRange(settings.pageRange || `${1}-${pageCount}`, pageCount) : [];
+  const allSelected = selectedPages.length === pageCount;
+
+  // Toggle halaman di page range
+  const togglePage = (pageNum) => {
+    const current = parsePageRange(settings.pageRange || `1-${pageCount}`, pageCount);
+    const idx = current.indexOf(pageNum);
+    const next = idx >= 0
+      ? current.filter((p) => p !== pageNum)
+      : [...current, pageNum].sort((a, b) => a - b);
+
+    // Kompres jadi string range
+    const rangeStr = compressToRange(next);
+    setRangeInput(rangeStr);
+    onSettingsChange({ pageRange: rangeStr, pageNumber: pageNum });
+  };
+
+  // Handle input page range manual
+  const handleRangeSubmit = (value) => {
+    setRangeInput(value);
+    const parsed = parsePageRange(value, pageCount);
+    if (parsed.length > 0) {
+      onSettingsChange({ pageRange: value, pageNumber: parsed[0] });
+    }
+  };
+
+  // Select all / deselect all
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      const rangeStr = `${settings.pageNumber}`;
+      setRangeInput(rangeStr);
+      onSettingsChange({ pageRange: rangeStr });
+    } else {
+      const rangeStr = `1-${pageCount}`;
+      setRangeInput(rangeStr);
+      onSettingsChange({ pageRange: rangeStr });
+    }
+  };
 
   if (!file) {
     return (
@@ -126,35 +168,87 @@ export default function ReceiptPreview({ file, settings, onSettingsChange, conve
         </div>
       </div>
 
-      {/* Thumbnail strip — klik untuk pilih halaman */}
+      {/* Thumbnail strip + page range selector */}
       {isPdf && thumbnails.length > 1 && (
         <div className="mt-4 border-t border-ink-900/10 pt-4">
-          <p className="mb-2 text-xs font-medium text-ink-700">Pilih Halaman</p>
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
-            {thumbnails.map((url, i) => (
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-medium text-ink-700">Pilih Halaman</p>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-ink-500">
+                {selectedPages.length}/{pageCount} dipilih
+              </span>
               <button
-                key={i}
-                onClick={() => onSettingsChange({ pageNumber: i + 1 })}
-                className={`relative shrink-0 overflow-hidden rounded-lg border-2 transition-all ${
-                  settings.pageNumber === i + 1
-                    ? "border-signal ring-2 ring-signal/20"
-                    : "border-ink-900/10 hover:border-ink-900/25"
-                }`}
+                onClick={toggleSelectAll}
+                className="rounded px-2 py-0.5 text-[10px] font-medium text-signal hover:bg-signal/5"
               >
-                <img
-                  src={url}
-                  alt={`Halaman ${i + 1}`}
-                  className="h-20 w-auto"
-                />
-                <span className={`absolute bottom-0.5 right-0.5 rounded px-1 py-0.5 font-mono text-[10px] leading-none ${
-                  settings.pageNumber === i + 1
-                    ? "bg-signal text-white"
-                    : "bg-ink-900/60 text-white"
-                }`}>
-                  {i + 1}
-                </span>
+                {allSelected ? "Batal Semua" : "Pilih Semua"}
               </button>
-            ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+            {thumbnails.map((url, i) => {
+              const pageNum = i + 1;
+              const isSelected = selectedPages.includes(pageNum);
+              const isCurrent = settings.pageNumber === pageNum;
+              return (
+                <button
+                  key={i}
+                  onClick={() => togglePage(pageNum)}
+                  className={`relative shrink-0 overflow-hidden rounded-lg border-2 transition-all ${
+                    isCurrent
+                      ? "border-signal ring-2 ring-signal/20"
+                      : isSelected
+                      ? "border-wire ring-1 ring-wire/20"
+                      : "border-ink-900/10 opacity-50 hover:border-ink-900/25 hover:opacity-75"
+                  }`}
+                >
+                  <img
+                    src={url}
+                    alt={`Halaman ${pageNum}`}
+                    className="h-20 w-auto"
+                  />
+                  {/* Badge nomor halaman */}
+                  <span className={`absolute bottom-0.5 right-0.5 rounded px-1 py-0.5 font-mono text-[10px] leading-none ${
+                    isCurrent
+                      ? "bg-signal text-white"
+                      : isSelected
+                      ? "bg-wire text-white"
+                      : "bg-ink-900/60 text-white"
+                  }`}>
+                    {pageNum}
+                  </span>
+                  {/* Checkmark kalau terpilih */}
+                  {isSelected && !isCurrent && (
+                    <div className="absolute left-0.5 top-0.5 rounded-full bg-wire p-0.5">
+                      <Check size={8} className="text-white" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Input page range custom */}
+          <div className="mt-3">
+            <label className="text-xs font-medium text-ink-700">Range Halaman</label>
+            <input
+              type="text"
+              value={rangeInput}
+              onChange={(e) => setRangeInput(e.target.value)}
+              onBlur={() => handleRangeSubmit(rangeInput)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.target.blur();
+                  handleRangeSubmit(rangeInput);
+                }
+              }}
+              placeholder={`cth: 1-3, 5, 7-${pageCount}`}
+              className="mt-1 w-full rounded-lg border border-ink-900/10 px-3 py-1.5 font-mono text-sm text-ink-900 placeholder:text-ink-300 focus:border-signal focus:outline-none focus:ring-1 focus:ring-signal/20"
+            />
+            <p className="mt-1 text-[10px] text-ink-400">
+              Pisahkan dengan koma atau pakai tanda hubung. Cth: "2-10" atau "1,3,5-8"
+            </p>
           </div>
         </div>
       )}
