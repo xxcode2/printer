@@ -8,7 +8,7 @@ import { useBluetoothPrinter, PRINTER_STATUS } from "./hooks/useBluetoothPrinter
 import { useReceiptConverter } from "./hooks/useReceiptConverter";
 
 const DEFAULT_SETTINGS = {
-  paperWidthDots: 384, // 58mm
+  paperWidthDots: 576, // 80mm paper, 72mm printable width (RPP02N)
   threshold: 180,
   dither: false,
   pageNumber: 1,
@@ -40,7 +40,7 @@ export default function App() {
           <div className="space-y-6">
             <PrinterPanel printer={printer} />
             <FileUploader file={file} onFileSelected={handleFileSelected} />
-            <PrintControls printer={printer} bitmap={converter.bitmap} disabled={!canPrint} />
+            <PrintControls printer={printer} bitmap={converter.bitmap} file={file} settings={settings} disabled={!canPrint} />
           </div>
 
           {/* Kolom kanan: preview & pengaturan konversi */}

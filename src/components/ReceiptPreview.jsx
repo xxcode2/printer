@@ -2,7 +2,8 @@ import { AlertCircle } from "lucide-react";
 
 const PAPER_WIDTHS = [
   { label: "58 mm", dots: 384 },
-  { label: "80 mm", dots: 576 },
+  { label: "72 mm", dots: 576 },
+  { label: "80 mm", dots: 640 },
 ];
 
 export default function ReceiptPreview({ file, settings, onSettingsChange, converter }) {

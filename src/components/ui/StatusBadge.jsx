@@ -2,7 +2,8 @@ import clsx from "clsx";
 
 const CONFIG = {
   connected: { label: "Terhubung", dot: "bg-wire", text: "text-wire" },
-  connecting: { label: "Menghubungkan…", dot: "bg-amber-500 animate-pulse", text: "text-amber-600" },
+  connecting: { label: "Menghubungkan\u2026", dot: "bg-amber-500 animate-pulse", text: "text-amber-600" },
+  reconnecting: { label: "Menyambungkan kembali\u2026", dot: "bg-amber-500 animate-pulse", text: "text-amber-600" },
   disconnected: { label: "Belum terhubung", dot: "bg-ink-300", text: "text-ink-500" },
   error: { label: "Gagal terhubung", dot: "bg-signal", text: "text-signal" },
   unsupported: { label: "Browser tidak didukung", dot: "bg-signal", text: "text-signal" },

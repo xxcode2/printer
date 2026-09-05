@@ -1,11 +1,16 @@
 import { useState } from "react";
-import { Printer, Minus, Plus, CheckCircle2 } from "lucide-react";
+import { Printer, Minus, Plus, CheckCircle2, Layers } from "lucide-react";
 import Button from "./ui/Button";
 import { buildPrintJob } from "../utils/escpos";
+import { convertAllPdfPages } from "../utils/multiPageConvert";
 
-export default function PrintControls({ printer, bitmap, disabled }) {
+export default function PrintControls({ printer, bitmap, file, settings, disabled }) {
   const [copies, setCopies] = useState(1);
   const [justPrinted, setJustPrinted] = useState(false);
+  const [isPrintingAll, setIsPrintingAll] = useState(false);
+  const [allPagesProgress, setAllPagesProgress] = useState(null);
+
+  const isPdf = file?.type === "application/pdf";
 
   const handlePrint = async () => {
     if (!bitmap) return;
@@ -14,6 +19,44 @@ export default function PrintControls({ printer, bitmap, disabled }) {
     await printer.print(job);
     setJustPrinted(true);
     setTimeout(() => setJustPrinted(false), 2500);
+  };
+
+  const handlePrintAllPages = async () => {
+    if (!file || !isPdf) return;
+    setIsPrintingAll(true);
+    setAllPagesProgress(null);
+    setJustPrinted(false);
+
+    try {
+      const { bitmaps, pageCount } = await convertAllPdfPages(
+        file,
+        {
+          paperWidthDots: settings.paperWidthDots,
+          threshold: settings.threshold,
+          dither: settings.dither,
+        },
+        (current, total) => setAllPagesProgress({ current, total })
+      );
+
+      // Kirim setiap halaman sebagai job terpisah, halaman terakhir yang di-cut
+      for (let i = 0; i < bitmaps.length; i++) {
+        const isLast = i === bitmaps.length - 1;
+        const job = buildPrintJob(bitmaps[i], {
+          feedAfter: 4,
+          cut: isLast,
+          copies,
+        });
+        await printer.print(job);
+      }
+
+      setJustPrinted(true);
+      setTimeout(() => setJustPrinted(false), 2500);
+    } catch (err) {
+      console.error("Print all pages error:", err);
+    } finally {
+      setIsPrintingAll(false);
+      setAllPagesProgress(null);
+    }
   };
 
   return (
@@ -48,6 +91,23 @@ export default function PrintControls({ printer, bitmap, disabled }) {
       >
         {justPrinted ? "Terkirim ke Printer" : "Print"}
       </Button>
+
+      {isPdf && (
+        <Button
+          icon={justPrinted ? CheckCircle2 : Layers}
+          variant="secondary"
+          onClick={handlePrintAllPages}
+          loading={isPrintingAll}
+          disabled={disabled || !file}
+          className="mt-2 w-full"
+        >
+          {isPrintingAll && allPagesProgress
+            ? `Memproses ${allPagesProgress.current}/${allPagesProgress.total}…`
+            : justPrinted
+            ? "Semua Halaman Terkirim"
+            : "Cetak Semua Halaman"}
+        </Button>
+      )}
 
       {disabled && (
         <p className="mt-2 text-center text-xs text-ink-500">

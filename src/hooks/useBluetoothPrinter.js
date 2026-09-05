@@ -50,6 +50,7 @@ async function findWritableCharacteristic(server) {
 export function useBluetoothPrinter(options = {}) {
   const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const chunkDelayMs = options.chunkDelayMs ?? DEFAULT_CHUNK_DELAY_MS;
+  const maxReconnectAttempts = options.maxReconnectAttempts ?? 3;
 
   const isSupported = typeof navigator !== "undefined" && !!navigator.bluetooth;
 
@@ -59,23 +60,83 @@ export function useBluetoothPrinter(options = {}) {
   const [deviceName, setDeviceName] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const deviceRef = useRef(null);
   const characteristicRef = useRef(null);
+  const userDisconnectedRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+
+  /**
+   * Mencoba menyambungkan kembali ke device yang sama setelah disconnect
+   * tidak disengaja. Menggunakan exponential backoff sederhana.
+   */
+  const attemptReconnect = useCallback(async (device) => {
+    if (userDisconnectedRef.current) return;
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      setIsReconnecting(false);
+      reconnectAttemptsRef.current = 0;
+      return;
+    }
+
+    reconnectAttemptsRef.current += 1;
+    setIsReconnecting(true);
+    setStatus(PRINTER_STATUS.CONNECTING);
+
+    const delay = Math.min(1000 * 2 ** (reconnectAttemptsRef.current - 1), 5000);
+    await sleep(delay);
+
+    // Pastikan kita masih mau reconnect (user bisa saja disconnect di tengah tunggu)
+    if (userDisconnectedRef.current) {
+      setIsReconnecting(false);
+      return;
+    }
+
+    try {
+      const server = await device.gatt.connect();
+      const characteristic = await findWritableCharacteristic(server);
+
+      if (!characteristic) {
+        throw new Error("Karakteristik writable tidak ditemukan setelah reconnect.");
+      }
+
+      characteristicRef.current = characteristic;
+      reconnectAttemptsRef.current = 0;
+      setIsReconnecting(false);
+      setStatus(PRINTER_STATUS.CONNECTED);
+    } catch (err) {
+      console.warn(`Reconnect attempt ${reconnectAttemptsRef.current} failed:`, err.message);
+      // Jika gagal, handleDisconnected akan dipanggil lagi oleh GATT event,
+      // yang akan memicu attemptReconnect lagi secara rekursif.
+      setIsReconnecting(false);
+    }
+  }, [maxReconnectAttempts]);
 
   const handleDisconnected = useCallback(() => {
+    const device = deviceRef.current;
     setStatus(PRINTER_STATUS.DISCONNECTED);
-    setDeviceName(null);
     characteristicRef.current = null;
-  }, []);
+
+    // Hanya auto-reconnect jika disconnect bukan oleh user
+    if (!userDisconnectedRef.current && device?.gatt) {
+      attemptReconnect(device);
+    } else {
+      setDeviceName(null);
+    }
+  }, [attemptReconnect]);
 
   const disconnect = useCallback(() => {
+    userDisconnectedRef.current = true;
+    reconnectAttemptsRef.current = 0;
+    setIsReconnecting(false);
     const device = deviceRef.current;
     if (device?.gatt?.connected) {
       device.gatt.disconnect();
     }
-    handleDisconnected();
-  }, [handleDisconnected]);
+    setDeviceName(null);
+    setStatus(PRINTER_STATUS.DISCONNECTED);
+    characteristicRef.current = null;
+  }, []);
 
   const connect = useCallback(async () => {
     if (!isSupported) {
@@ -95,6 +156,8 @@ export function useBluetoothPrinter(options = {}) {
         optionalServices: [...KNOWN_PRINTER_SERVICES, ...GENERIC_OPTIONAL_SERVICES],
       });
 
+      userDisconnectedRef.current = false;
+      reconnectAttemptsRef.current = 0;
       deviceRef.current = device;
       device.addEventListener("gattserverdisconnected", handleDisconnected);
 
@@ -177,6 +240,7 @@ export function useBluetoothPrinter(options = {}) {
     deviceName,
     errorMessage,
     isPrinting,
+    isReconnecting,
     connect,
     disconnect,
     print,

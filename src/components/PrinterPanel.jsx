@@ -4,9 +4,12 @@ import StatusBadge from "./ui/StatusBadge";
 import { PRINTER_STATUS } from "../hooks/useBluetoothPrinter";
 
 export default function PrinterPanel({ printer }) {
-  const { status, deviceName, errorMessage, connect, disconnect, isSupported } = printer;
+  const { status, deviceName, errorMessage, connect, disconnect, isSupported, isReconnecting } = printer;
   const isConnected = status === PRINTER_STATUS.CONNECTED;
   const isConnecting = status === PRINTER_STATUS.CONNECTING;
+
+  // Tampilkan status "reconnecting" kalau printer sedang mencoba sambung ulang
+  const badgeStatus = isReconnecting ? "reconnecting" : status;
 
   return (
     <div className="rounded-xl border border-ink-900/10 bg-white p-5 shadow-card">
@@ -14,7 +17,7 @@ export default function PrinterPanel({ printer }) {
         <div>
           <h2 className="font-display text-base font-semibold text-ink-900">Printer</h2>
           <div className="mt-1.5">
-            <StatusBadge status={status} />
+            <StatusBadge status={badgeStatus} />
           </div>
           {isConnected && deviceName && (
             <p className="mt-1 font-mono text-xs text-ink-500">{deviceName}</p>
