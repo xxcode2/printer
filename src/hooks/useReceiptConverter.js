@@ -11,7 +11,7 @@ import { canvasToMonochromeBitmap, createLogoHeader, cropWhitespace, renderMonoc
  *
  * Diproses ulang otomatis setiap kali file atau salah satu setting berubah.
  */
-export function useReceiptConverter(file, { paperWidthDots, threshold, dither, pageNumber = 1, showLogo = true, logoSize = 35 }) {
+export function useReceiptConverter(file, { paperWidthDots, threshold, dither, pageNumber = 1, showLogo = true }) {
   const [state, setState] = useState({
     status: "idle", // idle | loading | ready | error
     error: null,
@@ -94,7 +94,7 @@ export function useReceiptConverter(file, { paperWidthDots, threshold, dither, p
         // Sisipkan logo PakeinAja di atas resi kalau diaktifkan
         if (showLogo) {
           try {
-            const logoHeader = await createLogoHeader("/pakein.jpg", paperWidthDots, { logoWidthPx: Math.round(paperWidthDots * logoSize / 100) });
+            const logoHeader = await createLogoHeader("/pakein.jpg", paperWidthDots);
             bitmap = stackBitmaps(logoHeader, bitmap);
           } catch (logoErr) {
             console.warn("Logo header gagal dimuat, cetak tanpa logo:", logoErr);

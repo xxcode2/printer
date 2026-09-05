@@ -192,7 +192,7 @@ export function renderMonochromeToCanvas({ width, height, bits }) {
  */
 export async function createLogoHeader(logoUrl, paperWidthDots, { logoWidthPx, paddingPx = 12 } = {}) {
   const logoWidth = logoWidthPx || Math.round(paperWidthDots * 0.35);
-  const framePadding = 6; // jarak antara logo dengan border frame
+  const framePadding = 3; // jarak tipis antara logo dengan border frame
   const borderWidth = 1; // tebal border frame
 
   // Load logo image
