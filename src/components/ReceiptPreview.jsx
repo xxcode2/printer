@@ -165,6 +165,16 @@ export default function ReceiptPreview({ file, settings, onSettingsChange, conve
             />
             Dithering (lebih baik untuk foto/logo)
           </label>
+
+          <label className="flex items-center gap-2 text-xs font-medium text-ink-700">
+            <input
+              type="checkbox"
+              checked={settings.showLogo}
+              onChange={(e) => onSettingsChange({ showLogo: e.target.checked })}
+              className="accent-signal"
+            />
+            Sisipkan logo PakeinAja di atas resi
+          </label>
         </div>
       </div>
 

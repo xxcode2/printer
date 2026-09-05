@@ -177,3 +177,79 @@ export function renderMonochromeToCanvas({ width, height, bits }) {
   ctx.putImageData(imageData, 0, 0);
   return canvas;
 }
+
+/**
+ * Membuat bitmap header logo dari sebuah gambar.
+ * Logo di-scale ke `logoWidthPx` (default ~35% lebar kertas),
+ * ditengahkan, dan ditambah padding + garis pemisah di bawahnya.
+ *
+ * @param {string} logoUrl - URL gambar logo
+ * @param {number} paperWidthDots - lebar kertas dalam dot
+ * @param {Object} [opts]
+ * @param {number} [opts.logoWidthPx] - lebar logo dalam pixel
+ * @param {number} [opts.paddingPx] - jarak atas/bawah logo
+ * @returns {Promise<{ width: number, height: number, bits: Uint8Array }>}
+ */
+export async function createLogoHeader(logoUrl, paperWidthDots, { logoWidthPx, paddingPx = 12 } = {}) {
+  const logoWidth = logoWidthPx || Math.round(paperWidthDots * 0.35);
+
+  // Load logo image
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = logoUrl;
+  });
+
+  // Scale logo
+  const logoHeight = Math.round((img.height / img.width) * logoWidth);
+  const totalHeight = paddingPx + logoHeight + paddingPx + 2; // 2px garis pemisah
+
+  // Gambar logo di tengah canvas putih
+  const canvas = document.createElement("canvas");
+  canvas.width = paperWidthDots;
+  canvas.height = totalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, paperWidthDots, totalHeight);
+
+  const xOffset = Math.round((paperWidthDots - logoWidth) / 2);
+  ctx.drawImage(img, xOffset, paddingPx, logoWidth, logoHeight);
+
+  // Garis pemisah tipis di bawah
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, totalHeight - 1, paperWidthDots, 1);
+
+  // Konversi ke monokrom
+  const rawBitmap = canvasToMonochromeBitmap(canvas, { threshold: 180, dither: false });
+  return cropWhitespace(rawBitmap, 4);
+}
+
+/**
+ * Menggabungkan dua bitmap secara vertikal (atas + bawah).
+ * Lebar harus sama. Kalau berbeda, yang lebih kecil di-pad putih.
+ */
+export function stackBitmaps(top, bottom) {
+  const width = Math.max(top.width, bottom.width);
+  const totalHeight = top.height + bottom.height;
+  const combined = new Uint8Array(width * totalHeight);
+
+  // Copy top bitmap (tengahkan kalau lebih sempit)
+  const topOffset = Math.round((width - top.width) / 2);
+  for (let y = 0; y < top.height; y++) {
+    for (let x = 0; x < top.width; x++) {
+      combined[y * width + topOffset + x] = top.bits[y * top.width + x];
+    }
+  }
+
+  // Copy bottom bitmap
+  const bottomOffset = Math.round((width - bottom.width) / 2);
+  for (let y = 0; y < bottom.height; y++) {
+    for (let x = 0; x < bottom.width; x++) {
+      combined[(top.height + y) * width + bottomOffset + x] = bottom.bits[y * bottom.width + x];
+    }
+  }
+
+  return { width, height: totalHeight, bits: combined };
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getPdfPageCount, loadImageFile, renderPdfPageToCanvas } from "../utils/pdfToCanvas";
-import { canvasToMonochromeBitmap, cropWhitespace, renderMonochromeToCanvas, resizeToWidth } from "../utils/imageProcessor";
+import { canvasToMonochromeBitmap, createLogoHeader, cropWhitespace, renderMonochromeToCanvas, resizeToWidth, stackBitmaps } from "../utils/imageProcessor";
 
 /**
  * Mengubah file resi (PDF/PNG/JPG) menjadi bitmap monokrom siap-cetak,
@@ -11,7 +11,7 @@ import { canvasToMonochromeBitmap, cropWhitespace, renderMonochromeToCanvas, res
  *
  * Diproses ulang otomatis setiap kali file atau salah satu setting berubah.
  */
-export function useReceiptConverter(file, { paperWidthDots, threshold, dither, pageNumber = 1 }) {
+export function useReceiptConverter(file, { paperWidthDots, threshold, dither, pageNumber = 1, showLogo = true }) {
   const [state, setState] = useState({
     status: "idle", // idle | loading | ready | error
     error: null,
@@ -89,7 +89,18 @@ export function useReceiptConverter(file, { paperWidthDots, threshold, dither, p
 
         const resized = resizeToWidth(sourceCanvas, paperWidthDots);
         const rawBitmap = canvasToMonochromeBitmap(resized, { threshold, dither });
-        const bitmap = cropWhitespace(rawBitmap);
+        let bitmap = cropWhitespace(rawBitmap);
+
+        // Sisipkan logo PakeinAja di atas resi kalau diaktifkan
+        if (showLogo) {
+          try {
+            const logoHeader = await createLogoHeader("/pakein.jpg", paperWidthDots);
+            bitmap = stackBitmaps(logoHeader, bitmap);
+          } catch (logoErr) {
+            console.warn("Logo header gagal dimuat, cetak tanpa logo:", logoErr);
+          }
+        }
+
         const previewCanvas = renderMonochromeToCanvas(bitmap);
 
         if (cancelled) return;

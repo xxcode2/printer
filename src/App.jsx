@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
   dither: false,
   pageNumber: 1,
   pageRange: "", // kosong = semua halaman
+  showLogo: true, // tampilkan logo PakeinAja di atas resi
 };
 
 export default function App() {
