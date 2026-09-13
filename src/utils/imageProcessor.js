@@ -192,8 +192,6 @@ export function renderMonochromeToCanvas({ width, height, bits }) {
  */
 export async function createLogoHeader(logoUrl, paperWidthDots, { logoWidthPx, paddingPx = 12 } = {}) {
   const logoWidth = logoWidthPx || Math.round(paperWidthDots * 0.35);
-  const framePadding = 3; // jarak tipis antara logo dengan border frame
-  const borderWidth = 1; // tebal border frame
 
   // Load logo image
   const img = await new Promise((resolve, reject) => {
@@ -207,13 +205,9 @@ export async function createLogoHeader(logoUrl, paperWidthDots, { logoWidthPx, p
   // Scale logo
   const logoHeight = Math.round((img.height / img.width) * logoWidth);
 
-  // Hitung ukuran frame (border + padding + logo)
-  const frameWidth = logoWidth + framePadding * 2 + borderWidth * 2;
-  const frameHeight = logoHeight + framePadding * 2 + borderWidth * 2;
+  const totalHeight = paddingPx + logoHeight + paddingPx + 2; // 2px garis pemisah
 
-  const totalHeight = paddingPx + frameHeight + paddingPx + 2; // 2px garis pemisah
-
-  // Gambar logo di tengah canvas putih
+  // Gambar logo di tengah canvas putih (tanpa frame/border)
   const canvas = document.createElement("canvas");
   canvas.width = paperWidthDots;
   canvas.height = totalHeight;
@@ -221,21 +215,9 @@ export async function createLogoHeader(logoUrl, paperWidthDots, { logoWidthPx, p
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, paperWidthDots, totalHeight);
 
-  // Posisi frame (tengah horizontal)
-  const frameX = Math.round((paperWidthDots - frameWidth) / 2);
-  const frameY = paddingPx;
-
-  // Gambar border frame (kotak hitam)
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(frameX, frameY, frameWidth, frameHeight);
-
-  // Gambar area putih di dalam frame (di atas border hitam)
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(frameX + borderWidth, frameY + borderWidth, frameWidth - borderWidth * 2, frameHeight - borderWidth * 2);
-
-  // Gambar logo di tengah dalam frame
-  const logoX = frameX + borderWidth + framePadding;
-  const logoY = frameY + borderWidth + framePadding;
+  // Posisi logo (tengah horizontal)
+  const logoX = Math.round((paperWidthDots - logoWidth) / 2);
+  const logoY = paddingPx;
   ctx.drawImage(img, logoX, logoY, logoWidth, logoHeight);
 
   // Garis pemisah tipis di bawah
