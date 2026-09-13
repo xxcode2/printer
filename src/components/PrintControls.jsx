@@ -13,11 +13,15 @@ export default function PrintControls({ printer, bitmap, file, settings, disable
 
   const isPdf = file?.type === "application/pdf";
 
-  // Hitung halaman yang dipilih dari pageRange
+  // Hitung halaman yang dipilih dari pageRange.
+  // pageRange kosong berarti "semua halaman" (samakan dengan default di ReceiptPreview.jsx),
+  // bukan "tidak ada halaman terpilih" — sebelumnya ini yang bikin tombol "Cetak Semua
+  // Halaman" ke-disable di awal padahal thumbnail menampilkan semua halaman terpilih.
+  const totalPagesForRange = settings.pageCount || 1;
   const selectedPages = isPdf
-    ? parsePageRange(settings.pageRange || "", settings.pageCount || 1)
+    ? parsePageRange(settings.pageRange || `1-${totalPagesForRange}`, totalPagesForRange)
     : [];
-  const totalPages = isPdf ? (settings.pageCount || 1) : 0;
+  const totalPages = isPdf ? totalPagesForRange : 0;
   const hasCustomRange = selectedPages.length > 0 && selectedPages.length < totalPages;
 
   const handlePrint = async () => {
