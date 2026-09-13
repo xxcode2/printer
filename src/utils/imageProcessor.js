@@ -179,18 +179,78 @@ export function renderMonochromeToCanvas({ width, height, bits }) {
 }
 
 /**
+ * Mendeteksi kotak pembatas (bounding box) konten non-latar-belakang pada
+ * sebuah gambar logo. Banyak file logo (termasuk pakein.jpg) punya margin
+ * kosong dan shadow bawaan di sekeliling teks/ikon aslinya. Kalau logo
+ * di-scale berdasarkan ukuran KANVAS PENUH gambar tsb, hasilnya jadi kecil
+ * dan tidak proporsional (rasio aspek dihitung dari area yang sebagian
+ * besar kosong). Fungsi ini mencari area yang benar-benar berisi konten,
+ * supaya logo bisa di-scale & ditempel berdasarkan ukuran aslinya.
+ */
+function detectContentBounds(img) {
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  const { data, width, height } = ctx.getImageData(0, 0, img.width, img.height);
+
+  // Ambil warna pojok kiri-atas sebagai referensi warna "latar belakang"
+  const bgR = data[0];
+  const bgG = data[1];
+  const bgB = data[2];
+  const COLOR_TOLERANCE = 80; // toleransi variasi warna kertas/latar logo (di atas ini termasuk soft-shadow tipis yang tidak perlu ikut ter-crop)
+
+  let minX = width;
+  let maxX = -1;
+  let minY = height;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const dr = data[i] - bgR;
+      const dg = data[i + 1] - bgG;
+      const db = data[i + 2] - bgB;
+      const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+      if (distance > COLOR_TOLERANCE) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // Kalau tidak ada konten terdeteksi (mis. gambar polos), pakai seluruh gambar
+  if (maxX < minX || maxY < minY) {
+    return { x: 0, y: 0, width, height };
+  }
+
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
+/**
  * Membuat bitmap header logo dari sebuah gambar.
- * Logo di-scale ke `logoWidthPx` (default ~35% lebar kertas),
- * ditengahkan, dan ditambah padding + garis pemisah di bawahnya.
+ * Logo di-crop dulu ke bounding box konten aslinya (lihat detectContentBounds)
+ * baru di-scale ke `logoWidthPx` (default ~35% lebar kertas) supaya proporsinya
+ * benar, ditengahkan, lalu ditambah jarak sebelum garis pemisah dan sesudahnya
+ * — jarak sesudah garis inilah yang jadi celah kosong untuk gunting manual
+ * sebelum konten resi mulai.
  *
  * @param {string} logoUrl - URL gambar logo
  * @param {number} paperWidthDots - lebar kertas dalam dot
  * @param {Object} [opts]
  * @param {number} [opts.logoWidthPx] - lebar logo dalam pixel
- * @param {number} [opts.paddingPx] - jarak atas/bawah logo
+ * @param {number} [opts.paddingTopPx] - jarak dari tepi atas ke logo
+ * @param {number} [opts.gapBeforeContentPx] - jarak dari bawah logo sampai konten resi (celah gunting)
  * @returns {Promise<{ width: number, height: number, bits: Uint8Array }>}
  */
-export async function createLogoHeader(logoUrl, paperWidthDots, { logoWidthPx, paddingPx = 12 } = {}) {
+export async function createLogoHeader(
+  logoUrl,
+  paperWidthDots,
+  { logoWidthPx, paddingTopPx = 16, gapBeforeContentPx = 26 } = {}
+) {
   const logoWidth = logoWidthPx || Math.round(paperWidthDots * 0.35);
 
   // Load logo image
@@ -202,10 +262,14 @@ export async function createLogoHeader(logoUrl, paperWidthDots, { logoWidthPx, p
     image.src = logoUrl;
   });
 
-  // Scale logo
-  const logoHeight = Math.round((img.height / img.width) * logoWidth);
+  // Cari bounding box konten asli logo, biar margin/shadow kosong bawaan
+  // file tidak ikut menentukan rasio aspek & ukuran logo
+  const bounds = detectContentBounds(img);
+  const logoHeight = Math.round((bounds.height / bounds.width) * logoWidth);
 
-  const totalHeight = paddingPx + logoHeight + paddingPx + 2; // 2px garis pemisah
+  // Garis pemisah tebal 1px, diletakkan di tengah celah gunting
+  const totalHeight = paddingTopPx + logoHeight + gapBeforeContentPx + 1;
+  const lineY = paddingTopPx + logoHeight + Math.round(gapBeforeContentPx / 2);
 
   // Gambar logo di tengah canvas putih (tanpa frame/border)
   const canvas = document.createElement("canvas");
@@ -215,18 +279,29 @@ export async function createLogoHeader(logoUrl, paperWidthDots, { logoWidthPx, p
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, paperWidthDots, totalHeight);
 
-  // Posisi logo (tengah horizontal)
+  // Posisi logo (tengah horizontal), hanya gambar area konten (crop) dari source
   const logoX = Math.round((paperWidthDots - logoWidth) / 2);
-  const logoY = paddingPx;
-  ctx.drawImage(img, logoX, logoY, logoWidth, logoHeight);
+  const logoY = paddingTopPx;
+  ctx.drawImage(
+    img,
+    bounds.x,
+    bounds.y,
+    bounds.width,
+    bounds.height,
+    logoX,
+    logoY,
+    logoWidth,
+    logoHeight
+  );
 
-  // Garis pemisah tipis di bawah
+  // Garis pemisah tipis di tengah celah gunting
   ctx.fillStyle = "#000000";
-  ctx.fillRect(0, totalHeight - 1, paperWidthDots, 1);
+  ctx.fillRect(0, lineY, paperWidthDots, 1);
 
-  // Konversi ke monokrom
-  const rawBitmap = canvasToMonochromeBitmap(canvas, { threshold: 180, dither: false });
-  return cropWhitespace(rawBitmap, 4);
+  // Konversi ke monokrom. TIDAK dipotong ulang dengan cropWhitespace di sini —
+  // jarak atas/bawah di atas sudah sengaja diatur, kalau di-cropWhitespace lagi
+  // celah yang baru kita buat malah ikut terpotong.
+  return canvasToMonochromeBitmap(canvas, { threshold: 180, dither: false });
 }
 
 /**
