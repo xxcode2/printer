@@ -15,8 +15,30 @@ export const PRINTER_STATUS = {
   ERROR: "error",
 };
 
+// Key localStorage buat inget printer terakhir yang berhasil terhubung,
+// supaya bisa disambungkan otomatis lagi tiap app dibuka tanpa perlu klik
+// "Hubungkan Printer" berulang-ulang.
+const LAST_DEVICE_ID_KEY = "cetak-resi:last-printer-device-id";
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getStoredDeviceId() {
+  try {
+    return localStorage.getItem(LAST_DEVICE_ID_KEY);
+  } catch {
+    // localStorage bisa saja diblokir (mis. mode private ketat) — abaikan, bukan fatal
+    return null;
+  }
+}
+
+function storeDeviceId(id) {
+  try {
+    localStorage.setItem(LAST_DEVICE_ID_KEY, id);
+  } catch {
+    // abaikan, fitur auto-reconnect cukup dilewati kalau localStorage tidak bisa dipakai
+  }
 }
 
 /**
@@ -53,6 +75,11 @@ export function useBluetoothPrinter(options = {}) {
   const maxReconnectAttempts = options.maxReconnectAttempts ?? 3;
 
   const isSupported = typeof navigator !== "undefined" && !!navigator.bluetooth;
+  // getDevices() adalah API "persistent permissions" — mengembalikan device yang
+  // origin ini sudah pernah diizinkan aksesnya, tanpa perlu dialog requestDevice()
+  // lagi. Baru didukung Chrome/Edge versi cukup baru, jadi tetap dicek keberadaannya.
+  const supportsPersistentPermissions =
+    isSupported && typeof navigator.bluetooth.getDevices === "function";
 
   const [status, setStatus] = useState(
     isSupported ? PRINTER_STATUS.DISCONNECTED : PRINTER_STATUS.UNSUPPORTED
@@ -61,11 +88,40 @@ export function useBluetoothPrinter(options = {}) {
   const [errorMessage, setErrorMessage] = useState(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isAutoConnecting, setIsAutoConnecting] = useState(false);
 
   const deviceRef = useRef(null);
   const characteristicRef = useRef(null);
   const userDisconnectedRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
+
+  /**
+   * Menyambungkan GATT server dari sebuah BluetoothDevice yang sudah didapat
+   * (baik dari dialog requestDevice() maupun dari getDevices()), mencari
+   * characteristic yang bisa ditulis, lalu mengupdate semua state terkait.
+   * Dipakai bersama oleh connect() manual dan proses auto-reconnect.
+   */
+  const connectToDevice = useCallback(async (device) => {
+    userDisconnectedRef.current = false;
+    reconnectAttemptsRef.current = 0;
+    deviceRef.current = device;
+    device.addEventListener("gattserverdisconnected", handleDisconnectedRef.current);
+
+    const server = await device.gatt.connect();
+    const characteristic = await findWritableCharacteristic(server);
+
+    if (!characteristic) {
+      throw new Error(
+        "Printer terhubung tapi tidak ditemukan characteristic yang bisa ditulis. " +
+          "Tambahkan UUID service printer Anda ke src/constants/bluetooth.js."
+      );
+    }
+
+    characteristicRef.current = characteristic;
+    setDeviceName(device.name || "Printer Bluetooth");
+    setStatus(PRINTER_STATUS.CONNECTED);
+    if (device.id) storeDeviceId(device.id);
+  }, []);
 
   /**
    * Mencoba menyambungkan kembali ke device yang sama setelah disconnect
@@ -125,6 +181,14 @@ export function useBluetoothPrinter(options = {}) {
     }
   }, [attemptReconnect]);
 
+  // handleDisconnected dipakai di dalam connectToDevice lewat ref, biar
+  // connectToDevice tidak perlu didefinisikan ulang tiap handleDisconnected berubah
+  // (menghindari urutan deklarasi useCallback yang saling silang).
+  const handleDisconnectedRef = useRef(handleDisconnected);
+  useEffect(() => {
+    handleDisconnectedRef.current = handleDisconnected;
+  }, [handleDisconnected]);
+
   const disconnect = useCallback(() => {
     userDisconnectedRef.current = true;
     reconnectAttemptsRef.current = 0;
@@ -156,24 +220,7 @@ export function useBluetoothPrinter(options = {}) {
         optionalServices: [...KNOWN_PRINTER_SERVICES, ...GENERIC_OPTIONAL_SERVICES],
       });
 
-      userDisconnectedRef.current = false;
-      reconnectAttemptsRef.current = 0;
-      deviceRef.current = device;
-      device.addEventListener("gattserverdisconnected", handleDisconnected);
-
-      const server = await device.gatt.connect();
-      const characteristic = await findWritableCharacteristic(server);
-
-      if (!characteristic) {
-        throw new Error(
-          "Printer terhubung tapi tidak ditemukan characteristic yang bisa ditulis. " +
-            "Tambahkan UUID service printer Anda ke src/constants/bluetooth.js."
-        );
-      }
-
-      characteristicRef.current = characteristic;
-      setDeviceName(device.name || "Printer Bluetooth");
-      setStatus(PRINTER_STATUS.CONNECTED);
+      await connectToDevice(device);
     } catch (err) {
       // Pengguna membatalkan dialog pemilihan device bukan error fatal.
       if (err?.name === "NotFoundError") {
@@ -184,7 +231,7 @@ export function useBluetoothPrinter(options = {}) {
       setErrorMessage(err?.message || "Gagal terhubung ke printer.");
       setStatus(PRINTER_STATUS.ERROR);
     }
-  }, [handleDisconnected, isSupported]);
+  }, [connectToDevice, isSupported]);
 
   /**
    * Mengirim data biner (Uint8Array) ke printer dalam potongan-potongan
@@ -227,6 +274,44 @@ export function useBluetoothPrinter(options = {}) {
     [sendBytes]
   );
 
+  // Auto-reconnect ke printer terakhir begitu app dibuka, tanpa perlu klik
+  // "Hubungkan Printer" lagi. Hanya jalan kalau: browser mendukung persistent
+  // permissions, ada device id tersimpan dari sesi sebelumnya, dan device
+  // tsb masih ada di daftar izin origin ini (belum di-revoke lewat chrome://bluetooth-internals
+  // atau dilupakan manual).
+  useEffect(() => {
+    if (!supportsPersistentPermissions) return;
+
+    const lastDeviceId = getStoredDeviceId();
+    if (!lastDeviceId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const devices = await navigator.bluetooth.getDevices();
+        const device = devices.find((d) => d.id === lastDeviceId);
+        if (!device || cancelled) return;
+
+        setIsAutoConnecting(true);
+        setStatus(PRINTER_STATUS.CONNECTING);
+        await connectToDevice(device);
+      } catch (err) {
+        // Printer mungkin sedang mati/di luar jangkauan — gagal diam-diam,
+        // user tetap bisa klik "Hubungkan Printer" manual seperti biasa.
+        console.warn("Auto-reconnect ke printer terakhir gagal:", err?.message);
+        if (!cancelled) setStatus(PRINTER_STATUS.DISCONNECTED);
+      } finally {
+        if (!cancelled) setIsAutoConnecting(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     return () => {
       const device = deviceRef.current;
@@ -236,11 +321,13 @@ export function useBluetoothPrinter(options = {}) {
 
   return {
     isSupported,
+    supportsPersistentPermissions,
     status,
     deviceName,
     errorMessage,
     isPrinting,
     isReconnecting,
+    isAutoConnecting,
     connect,
     disconnect,
     print,
