@@ -199,7 +199,7 @@ function detectContentBounds(img) {
   const bgR = data[0];
   const bgG = data[1];
   const bgB = data[2];
-  const COLOR_TOLERANCE = 80; // toleransi variasi warna kertas/latar logo (di atas ini termasuk soft-shadow tipis yang tidak perlu ikut ter-crop)
+  const COLOR_TOLERANCE = 150; // di atas 80 logo kena, tapi ikut menjaring bintik dust & shadow tipis bawaan file yang bikin bounding box melebar sebelah dan logo kelihatan tidak center
 
   let minX = width;
   let maxX = -1;
@@ -227,7 +227,15 @@ function detectContentBounds(img) {
     return { x: 0, y: 0, width, height };
   }
 
-  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+  // Beri sedikit padding balik supaya tepi tipis logo (anti-aliasing) tidak
+  // ikut terpotong gara-gara tolerance warna yang cukup ketat di atas
+  const pad = 3;
+  const x = Math.max(0, minX - pad);
+  const y = Math.max(0, minY - pad);
+  const boundsWidth = Math.min(width - 1, maxX + pad) - x + 1;
+  const boundsHeight = Math.min(height - 1, maxY + pad) - y + 1;
+
+  return { x, y, width: boundsWidth, height: boundsHeight };
 }
 
 /**
@@ -249,7 +257,7 @@ function detectContentBounds(img) {
 export async function createLogoHeader(
   logoUrl,
   paperWidthDots,
-  { logoWidthPx, paddingTopPx = 16, gapBeforeContentPx = 26 } = {}
+  { logoWidthPx, paddingTopPx = 6, gapBeforeContentPx = 36 } = {}
 ) {
   const logoWidth = logoWidthPx || Math.round(paperWidthDots * 0.35);
 
